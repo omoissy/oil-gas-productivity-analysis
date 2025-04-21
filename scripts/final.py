@@ -26,6 +26,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import statsmodels.api as sm
 import scipy.stats as stats
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.feature_selection import RFE
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, r2_score
 
 
 df = pd.read_csv('all-years-states.csv')
@@ -141,7 +148,80 @@ plt.yticks(rotation=0)
 plt.tight_layout()
 plt.show()
 
-# %%
+# %%%%[markdown]
+# Oil Production Prediction -  Random forest
+
+X = df.drop('oil_production', axis=1)
+y = df['oil_production']
+
+numeric_features = ['year', 'rate', 'oil_wells_count', 'gas_production', 
+                   'oil_wells_dayson', 'gas_wells_count', 'gas_wells_dayson']
+categorical_features = ['state']
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', StandardScaler(), numeric_features),
+        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
+    ])
+
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+
+rfe = RFE(estimator=model, n_features_to_select=5, step=1)
+
+pipeline = Pipeline([
+    ('preprocessor', preprocessor),
+    ('feature_selection', rfe),
+    ('regressor', model)
+])
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+pipeline.fit(X_train, y_train)
+
+y_pred = pipeline.predict(X_test)
+print(f"R2 Score: {r2_score(y_test, y_pred):.3f}")
+print(f"MAE: {mean_absolute_error(y_test, y_pred):,.0f} barrels")
+
+# %%[markdown]
+# Recursive Feature Elimination
+
+feature_names = (numeric_features + 
+                list(pipeline.named_steps['preprocessor']
+                     .named_transformers_['cat']
+                     .get_feature_names_out(categorical_features)))
+
+selected_features = np.array(feature_names)[pipeline.named_steps['feature_selection'].support_]
+
+top_rank = []
+top_rank_name = []
+for i, (name, rank) in enumerate(zip(feature_names, 
+                                   pipeline.named_steps['feature_selection'].ranking_)):
+    print(f"{i+1}. {name}: {rank}")
+    if rank < 10 :
+        top_rank.append(rank)
+        top_rank_name.append(name)
+    
 
 
+plt.barh(top_rank_name, top_rank)  
+plt.title("Feature Importance (Lower Rank = More Important)")
+plt.show()    
+
+# %%[markdown]
+# Model Performance after Feature Elimination
+
+print("The selected features in RFE were ",selected_features)
+
+X_train_selected = pipeline.named_steps['feature_selection'].transform(
+    pipeline.named_steps['preprocessor'].transform(X_train)
+)
+X_test_selected = pipeline.named_steps['feature_selection'].transform(
+    pipeline.named_steps['preprocessor'].transform(X_test)
+)
+
+model.fit(X_train_selected, y_train)
+y_pred = model.predict(X_test_selected)
+
+print(f"R2: {r2_score(y_test, y_pred)}")
+print(f"MAE: {mean_absolute_error(y_test, y_pred)} barrels")
 # %%

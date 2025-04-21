@@ -24,14 +24,26 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import rfit 
 
 
 df = pd.read_csv('all-years-states.csv')
+df.drop(columns=["NAgas_prod_MCF", "conden_prod_BBL"], inplace=True)
 
-print(df.info())
-print("\n")
-print(df.head())
+df.rename(columns={
+    "state": "state",
+    "prod_year": "year",
+    "rate_class": "rate",
+    "num_oil_wells": "oil_wells_count",
+    "oil_prod_BBL": "oil_production",
+    "ADgas_prod_MCF": "gas_production",
+    "oil_wells_dayson": "oil_wells_dayson",
+    "num_gas_wells": "gas_wells_count",
+    "gas_wells_dayson": "gas_wells_dayson"
+}, inplace=True)
+
+
+print("Structure of the dataframe is - \n" ,df.info())
+print("\nHere are some values for reference - \n" ,df.head())
 
 # %%[markdown]
 # # Data Cleaning & Analysis
@@ -41,16 +53,22 @@ print("\nThere are no missing values in the dataframe.\n")
 
 print("\nData types:\n", df.dtypes)
 
-print("\nStats for oil production:\n", df['oil_prod_BBL'].describe())
+print("\nStats for oil production:\n", df['oil_production'].describe())
 print("\nUnique states:", df['state'].unique())
 
 # %%
 
-print(df['oil_prod_BBL'].head())
+print(df['oil_production'].head())
 
-sns.histplot(df['oil_prod_BBL'], bins=30, color='skyblue')
+sns.histplot(df['oil_production'], bins=30, color='skyblue')
 plt.title('Oil Production Histogram')
 plt.xlabel('Oil Production (BBL)')
+plt.ylabel('Frequency')
+plt.show()
+
+sns.histplot(df['gas_production'], bins=30, color='skyblue')
+plt.title('Gas Production Histogram')
+plt.xlabel('Gas Production (BBL)')
 plt.ylabel('Frequency')
 plt.show()
 

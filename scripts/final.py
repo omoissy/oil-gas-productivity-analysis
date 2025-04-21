@@ -24,6 +24,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import statsmodels.api as sm
+import scipy.stats as stats
 
 
 df = pd.read_csv('all-years-states.csv')
@@ -58,8 +60,6 @@ print("\nUnique states:", df['state'].unique())
 
 # %%
 
-print(df['oil_production'].head())
-
 sns.histplot(df['oil_production'], bins=30, color='skyblue')
 plt.title('Oil Production Histogram')
 plt.xlabel('Oil Production (BBL)')
@@ -72,9 +72,54 @@ plt.xlabel('Gas Production (BBL)')
 plt.ylabel('Frequency')
 plt.show()
 
+# %%[markdown]
+# Oil production by state comparision
+
+plt.figure(figsize=(12, 6))
+sns.boxplot(data=df, x='state', y='oil_production')
+plt.title('Oil Production by State')
+plt.xlabel('State')
+plt.ylabel('Oil Production')
+plt.xticks(rotation=45)
+plt.show()
 
 
-# %%
+groups = [group['oil_production'].values for name, group in df.groupby('state')]
+
+f_stat, p_value = stats.f_oneway(*groups)
+
+print(f'ANOVA F-statistic: {f_stat}')
+print(f'p-value: {p_value}')
+
+if p_value < 0.05:
+    print("There is a statistically significant difference in oil production among states.")
+else:
+    print("No statistically significant difference in oil production among states.")
+
+# %%[markdown]
+# Oil production & days of oil well production 
+from scipy.stats import pearsonr
+
+plt.figure(figsize=(8, 6))
+sns.scatterplot(data=df, x='oil_wells_dayson', y='oil_production', alpha=0.5)
+plt.title('Oil Production vs. Days of Oil Well Production')
+plt.xlabel('Days of Oil Well Production')
+plt.ylabel('Oil Production')
+plt.show()
+
+
+corr, p_value = pearsonr(df['oil_wells_dayson'], df['oil_production'])
+print(f"Pearson correlation coefficient: {corr}")
+print(f"P-value: {p_value}")
+
+if p_value < 0.05:
+    print("There is a statistically significant linear relationship between oil production and days of oil well production.")
+else:
+    print("No statistically significant linear relationship detected.")
+    
+ 
+# %%[markdown]
+# Correlation Plot of Oil Production Variables
 
 corr = df.select_dtypes(include=['int64']).corr()
 plt.figure(figsize=(12, 8))
@@ -95,5 +140,8 @@ plt.yticks(rotation=0)
 
 plt.tight_layout()
 plt.show()
+
+# %%
+
 
 # %%

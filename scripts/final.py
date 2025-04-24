@@ -19,7 +19,15 @@
 # * conden_prod_BBL: Condensate production in barrels (BBL)
 # * gas_wells_dayson: Total days of gas well production activity
 
+# ### Analysis Tasks:
+# 1. Predict Oil Production (Regression)
+# 2. Predict Non-Associated Gas Production (Regression)
+# 3. Predict Rate Class (Classification)
+
 #%%
+# ====================
+# Initial Setup
+# ====================
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -30,29 +38,32 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.feature_selection import RFE
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.metrics import (mean_absolute_error, r2_score, 
+                             accuracy_score, confusion_matrix, 
+                             classification_report)
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
 
-
+#%%
+# Load and prepare data
 df = pd.read_csv('all-years-states.csv')
-df.drop(columns=["NAgas_prod_MCF", "conden_prod_BBL"], inplace=True)
-
 df.rename(columns={
     "state": "state",
     "prod_year": "year",
     "rate_class": "rate",
     "num_oil_wells": "oil_wells_count",
     "oil_prod_BBL": "oil_production",
-    "ADgas_prod_MCF": "gas_production",
+    "ADgas_prod_MCF": "ADgas_production",
     "oil_wells_dayson": "oil_wells_dayson",
     "num_gas_wells": "gas_wells_count",
+    "NAgas_prod_MCF": "NAgas_production",
+    "conden_prod_BBL": "condensate_production",
     "gas_wells_dayson": "gas_wells_dayson"
 }, inplace=True)
 
-
-print("Structure of the dataframe is - \n" ,df.info())
-print("\nHere are some values for reference - \n" ,df.head())
+print("Data Structure:\n", df.info())
+print("\nSample Data:\n", df.head())
 
 # %%[markdown]
 # # Data Cleaning & Analysis
@@ -65,18 +76,90 @@ print("\nData types:\n", df.dtypes)
 print("\nStats for oil production:\n", df['oil_production'].describe())
 print("\nUnique states:", df['state'].unique())
 
-# %%
+#%%[markdown]
+# # Exploratory Data Analysis
 
-sns.histplot(df['oil_production'], bins=30, color='skyblue')
-plt.title('Oil Production Histogram')
-plt.xlabel('Oil Production (BBL)')
-plt.ylabel('Frequency')
+#%%
+# ====================
+# Target Distributions
+# ====================
+plt.figure(figsize=(18,5))
+
+# Oil Production
+plt.subplot(1,3,1)
+sns.histplot(np.log1p(df['oil_production']), kde=True, color='teal')
+plt.title('Oil Production (Log Scale)')
+
+# NAgas Production
+plt.subplot(1,3,2)
+sns.histplot(np.log1p(df['NAgas_production']), kde=True, color='orange')
+plt.title('Non-Associated Gas (Log Scale)')
+
+# Rate Class
+plt.subplot(1,3,3)
+sns.countplot(x='rate', data=df, palette='viridis')
+plt.title('Rate Class Distribution')
+
+plt.tight_layout()
 plt.show()
 
-sns.histplot(df['gas_production'], bins=30, color='skyblue')
-plt.title('Gas Production Histogram')
-plt.xlabel('Gas Production (BBL)')
-plt.ylabel('Frequency')
+
+
+#%%
+# ====================
+# Temporal Trends
+# ====================
+plt.figure(figsize=(16,6))
+
+# Oil Production Trend
+sns.lineplot(data=df, x='year', y='oil_production', 
+            estimator='median', errorbar=None,
+            color='teal', label='Oil')
+plt.title('National Production Trends 1995-2009')
+plt.xlabel('Year')
+plt.ylabel('Median Production')
+
+# NAgas Production Trend
+sns.lineplot(data=df, x='year', y='NAgas_production', 
+            estimator='median', errorbar=None,
+            color='orange', label='Non-Associated Gas')
+
+plt.legend()
+plt.grid(alpha=0.3)
+plt.show()
+# %% 
+
+# ====================
+# Node 4: Temporal and Categorical Trends
+# ====================
+# ====================
+# Node 4: Temporal and Categorical Trends (Fixed)
+# ====================
+plt.figure(figsize=(16, 8))
+sns.lineplot(
+    data=df[df['state'].isin(['TX', 'AK'])],
+    x='year',
+    y='oil_production',
+    hue='state',
+    estimator='sum',
+    errorbar=None
+)
+plt.title('Oil Production in TX vs AK')
+plt.xlabel('Year')
+plt.ylabel('Total Oil Production (BBL)')
+plt.grid(alpha=0.3)
+plt.show()
+
+#%%
+# ====================
+# Feature Correlations
+# ====================
+corr_matrix = df.select_dtypes(include=np.number).corr()
+
+plt.figure(figsize=(12,8))
+sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap='coolwarm',
+           vmin=-1, vmax=1, mask=np.triu(np.ones_like(corr_matrix)))
+plt.title('Feature Correlation Matrix')
 plt.show()
 
 # %%[markdown]
@@ -147,6 +230,127 @@ plt.yticks(rotation=0)
 
 plt.tight_layout()
 plt.show()
+
+
+#%%
+# ====================
+# Task 1: Oil Production Prediction (Regression)
+# ====================
+# Features: oil_wells_count, oil_wells_dayson, ADgas_production
+# Target: oil_production
+
+# Prepare data
+X = df[['oil_wells_count', 'oil_wells_dayson', 'ADgas_production']]
+y = np.log1p(df['oil_production'])  # Log transform for better performance
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Build pipeline
+oil_pipe = Pipeline([
+    ('scaler', StandardScaler()),
+    ('model', RandomForestRegressor(n_estimators=100, random_state=42))
+])
+
+# Train and predict
+oil_pipe.fit(X_train, y_train)
+preds = oil_pipe.predict(X_test)
+
+# Evaluate
+print("\nTask 1 - Oil Production Prediction:")
+print(f"R2 Score: {r2_score(y_test, preds):.3f}")
+print(f"MAE: {mean_absolute_error(np.expm1(y_test), np.expm1(preds)):,.0f} barrels")
+
+#%%
+# ====================
+# Task 2: NAgas Production Prediction (Regression)
+# ====================
+# Features: gas_wells_count, gas_wells_dayson, condensate_production
+# Target: NAgas_production
+
+# Prepare data
+X = df[['gas_wells_count', 'gas_wells_dayson', 'condensate_production']]
+y = np.log1p(df['NAgas_production'])  # Log transform
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Build pipeline
+gas_pipe = Pipeline([
+    ('scaler', StandardScaler()),
+    ('model', RandomForestRegressor(n_estimators=100, random_state=42))
+])
+
+# Train and predict
+gas_pipe.fit(X_train, y_train)
+preds = gas_pipe.predict(X_test)
+
+# Evaluate
+print("\nTask 2 - NAgas Production Prediction:")
+print(f"R2 Score: {r2_score(y_test, preds):.3f}")
+print(f"MAE: {mean_absolute_error(np.expm1(y_test), np.expm1(preds)):,.0f} MCF")
+
+#%%
+# ====================
+# Task 3: Rate Class Prediction (Classification)
+# ====================
+
+
+#%%
+# Task 3: Rate Class Prediction (Classification)
+# Drop irrelevant columns and define features/target
+
+# Features: All except state and year
+# Target: rate
+
+
+
+X = df.drop(columns=['state', 'year', 'rate'])
+y = df['rate']
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+
+clf_pipe = Pipeline([
+    ('scaler', StandardScaler()),
+    ('clf', RandomForestClassifier(n_estimators=100, random_state=42))
+])
+
+# Train model
+clf_pipe.fit(X_train, y_train)
+
+# Predict
+y_pred = clf_pipe.predict(X_test)
+
+# Classification report as dictionary
+report_dict = classification_report(y_test, y_pred, output_dict=True)
+
+# Convert to DataFrame
+report_df = pd.DataFrame(report_dict).transpose()
+
+# Show report
+print("\nClassification Report (Rate Class):")
+print(report_df)
+
+#%% 
+# Confusion matrix
+cm = confusion_matrix(y_test, y_pred)
+
+plt.figure(figsize=(14, 12))
+sns.heatmap(cm, annot=True, fmt='d', cmap='viridis')
+plt.title("Confusion Matrix - Rate Class Prediction", fontsize=16)
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.show()
+
+plt.figure(figsize=(10, 6))
+sns.barplot(x=importances, y=feature_names)
+plt.title("Feature Importance in Rate Class Prediction")
+plt.xlabel("Importance")
+plt.ylabel("Feature")
+plt.tight_layout()
+plt.show()
+
 
 # %%%%[markdown]
 # Oil Production Prediction -  Random forest

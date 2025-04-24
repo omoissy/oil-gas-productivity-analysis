@@ -47,7 +47,11 @@ from sklearn.cluster import KMeans
 
 #%%
 # Load and prepare data
+
+# Load dataset
 df = pd.read_csv('all-years-states.csv')
+
+# Rename columns for consistency
 df.rename(columns={
     "state": "state",
     "prod_year": "year",
@@ -62,12 +66,39 @@ df.rename(columns={
     "gas_wells_dayson": "gas_wells_dayson"
 }, inplace=True)
 
-print("Data Structure:\n", df.info())
-print("\nSample Data:\n", df.head())
+# Filter the data for years 1995-2009 and key states
+df = df[
+    (df['year'].between(1995, 2009)) &
+    (df['state'].isin(['TX', 'AK', 'CA', 'ND']))
+].drop(columns=['ADgas_production', 'condensate_production'])
+
+# Create productivity metrics
+df['oil_per_well'] = df['oil_production'] / df['oil_wells_count']
+df['oil_per_well_day'] = df['oil_production'] / df['oil_wells_dayson']
+
+# Drop rows with missing values
+df_cleaned = df.dropna()
+
+# Display the cleaned DataFrame info and first few rows
+df_shape = df_cleaned.shape
+df_range = (df_cleaned['year'].min(), df_cleaned['year'].max())
+df_info = df_cleaned.info()
+df_head = df_cleaned.head()
+
+(df_shape, df_range, df_head)
+
 
 # %%[markdown]
 # # Data Cleaning & Analysis
+# Drop rows where either derived column has missing values
+df.dropna(subset=['oil_per_well', 'oil_per_well_day'], inplace=True)
 
+print("After dropping missing values:")
+print(df.isnull().sum())
+print("Final cleaned shape:", df.shape)
+
+
+# %%[markdown]
 print("Missing values:\n", df.isnull().sum())
 print("\nThere are no missing values in the dataframe.\n")
 

@@ -46,6 +46,8 @@ from sklearn.metrics import (mean_absolute_error, r2_score,
 from sklearn.linear_model import LinearRegression
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.metrics import r2_score
 
 #%%
 # Load and prepare data
@@ -340,6 +342,46 @@ y_pred = model.predict(X_test_selected)
 print(f"R2: {r2_score(y_test, y_pred)}")
 print(f"MAE: {mean_absolute_error(y_test, y_pred)} barrels")
 
+
+# %%[markdown]
+# Reduce Overfitting
+# Log transformation of target variable
+y_train_log = np.log1p(y_train)
+model.fit(X_train_selected, y_train_log)  
+
+y_pred_log = model.predict(X_test_selected)
+y_pred = np.expm1(y_pred_log)  
+
+print(f"Manual R2: {r2_score(y_test, y_pred):.3f}")
+
+
+# %%[markdown]
+# Reduce Overfitting
+# Capping Extreme Outliers
+
+upper_cap = y_train.quantile(0.99)
+y_train_capped = np.log1p(y_train.clip(upper=upper_cap))
+
+model.fit(X_train_selected, y_train_capped)
+
+y_pred_log = model.predict(X_test_selected)
+
+y_pred = np.expm1(y_pred_log)  
+
+r2 = r2_score(y_test, y_pred)
+print(f"R2 Score: {r2:.3f}")
+
+
+# %%[markdown]
+# Reduce Overfitting
+# Plot Residuals
+
+residuals = y_test - y_pred
+plt.scatter(y_pred, residuals, alpha=0.3)
+plt.axhline(0, color='red')
+plt.xlabel("Predicted Production")
+plt.ylabel("Residuals")
+
 #%%
 # ====================
 # Task 2: NAgas Production Prediction (Linear Regression)
@@ -407,8 +449,6 @@ print(f"MAE: {mean_absolute_error(np.expm1(y_test), np.expm1(preds)):,.0f} MCF")
 
 # Features: All except state and year
 # Target: rate
-
-
 
 X = df.drop(columns=['state', 'year', 'rate'])
 y = df['rate']

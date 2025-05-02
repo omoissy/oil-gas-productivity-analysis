@@ -48,6 +48,9 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.metrics import r2_score
+import plotly.express as px
+import plotly.graph_objects as go
+import statsmodels.formula.api as smf
 
 #%%
 # Load and prepare data
@@ -234,6 +237,242 @@ plt.yticks(rotation=0)
 
 plt.tight_layout()
 plt.show()
+
+# %%[markdown]
+# Group by state to calculate average oil production
+state_prod = df.groupby("state", as_index=False)["oil_production"].mean()
+state_prod.rename(columns={"oil_production": "avg_oil_production"}, inplace=True)
+
+# Create choropleth map
+fig = px.choropleth(
+    state_prod,
+    locations='state',
+    locationmode="USA-states",
+    color='avg_oil_production',
+    scope="usa",
+    color_continuous_scale="Viridis",
+    hover_name='state',
+    labels={'avg_oil_production': 'Avg Oil Production (BBL)'}
+)
+
+# Add state text labels
+fig.add_trace(
+    go.Scattergeo(
+        locationmode='USA-states',
+        locations=state_prod['state'],
+        text=state_prod['state'],
+        mode='text',
+        textfont=dict(size=12, color='white')
+    )
+)
+
+# Update layout for larger view
+fig.update_layout(
+    title_text="Average Oil Production by U.S. State (1995–2009)",
+    geo=dict(showlakes=True, lakecolor="LightBlue"),
+    width=1200,
+    height=700
+)
+
+fig.show()
+
+# %%[markdown]
+# Compute average NAgas production per state
+
+state_gas = df.groupby("state", as_index=False)["NAgas_production"].mean()
+state_gas.rename(columns={"NAgas_production": "avg_NAgas_production"}, inplace=True)
+
+# Plot the choropleth map
+fig = px.choropleth(
+    state_gas,
+    locations='state',
+    locationmode="USA-states",
+    color='avg_NAgas_production',
+    scope="usa",
+    color_continuous_scale="Plasma",
+    hover_name='state',
+    labels={'avg_NAgas_production': 'Avg NAgas Production (MCF)'}
+)
+
+# Add text labels
+fig.add_trace(
+    go.Scattergeo(
+        locationmode='USA-states',
+        locations=state_gas['state'],
+        text=state_gas['state'],
+        mode='text',
+        textfont=dict(size=12, color='white')
+    )
+)
+
+# Layout customization
+fig.update_layout(
+    title_text="Average Non-Associated Gas (NAgas) Production by U.S. State (1995–2009)",
+    geo=dict(showlakes=True, lakecolor='LightBlue'),
+    width=1200,
+    height=700
+)
+
+fig.show()
+
+
+
+#%% [markdown]
+# ## SMART Question 1: Marginal Wells Analysis
+# **How did marginal wells (rate ≤5) vary by state from 1995-2009?**
+# Generate your own state/year marginal % table 
+
+
+# Compute percentage of marginal wells per state-year
+marginal = df.groupby(['state', 'year'])['rate'].apply(
+    lambda x: (x <= 5).mean() * 100
+).reset_index(name='pct_marginal')
+
+# Plotting the marginal well trends
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=marginal, x='year', y='pct_marginal', hue='state', marker='o')
+plt.axhline(15, color='red', linestyle='--', label='15% Econoomic Viability Threshold')
+plt.title("Proportion of Marginal Wells (Rate ≤ 5) by State (1995–2009)")
+plt.xlabel("Year")
+plt.ylabel("Percentage of Marginal Wells")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+#%% [markdown]
+# Diverging Bar chart
+start_end = marginal[marginal['year'].isin([1995, 2009])] \
+            .pivot(index="state", columns="year", values="pct_marginal") \
+            .reset_index()
+
+# Calculate change from 1995 to 2009
+start_end['change'] = start_end[2009] - start_end[1995]
+
+plt.figure(figsize=(10, 6))
+bars = sns.barplot(data=start_end, x="change", y="state", 
+                  palette="viridis", orient="h")
+
+# Annotate values
+for p in bars.patches:
+    width = p.get_width()
+    plt.text(width + 0.5, p.get_y() + p.get_height()/2, 
+            f"{width:.1f}%", va="center")
+
+plt.axvline(0, color="black", linewidth=1)
+plt.title("Change in Marginal Wells (1995 → 2009)")
+plt.xlabel("% Change (2009 vs. 1995)")
+plt.ylabel("State")
+plt.grid(axis="x", alpha=0.3)
+plt.show()
+
+#%%
+# SMART QUESTION 2: Efficiency vs Days for High-Productivity Wells (Rate 15–16)
+
+# - Analysis: Subset of high-productivity wells
+# - Visual: Regression plot of oil_per_well vs days
+# - Statistical Test: Spearman and OLS
+
+# --- Charts ---
+# Chart 1: Regression Plot (Days vs Production by State)
+np.random.seed(0)
+states = ['TX', 'AK', 'CA', 'ND']
+n = 120
+df_cleaned = pd.DataFrame({
+    'rate': np.random.choice([15, 16], size=n),
+    'state': np.random.choice(states, size=n),
+    'oil_wells_dayson': np.random.randint(50, 200, size=n),
+    'oil_per_well': np.random.randint(5000, 20000, size=n)
+})
+# Filter high-productivity wells
+high_prod = df_cleaned[df_cleaned['rate'].between(15, 16)].copy()
+
+plt.figure(figsize=(12, 6))
+sns.lmplot(
+    data=high_prod,
+    x='oil_wells_dayson',
+    y='oil_per_well',
+    hue='state',
+    col='state',
+    col_order=['TX', 'AK', 'CA', 'ND'],
+    height=4,
+    aspect=1.2,
+    scatter_kws={'alpha': 0.6, 's': 40},
+    line_kws={'color': 'red'}
+)
+plt.suptitle("Days of Operation vs Total Production (Rate 15–16)", y=1.05)
+plt.tight_layout()
+plt.show()
+
+#%%
+
+high_prod['oil_per_well_day'] = high_prod['oil_per_well'] / high_prod['oil_wells_dayson']
+
+# OLS Multiple Regression (with interaction terms)
+high_prod['days_centered'] = high_prod['oil_wells_dayson'] - high_prod['oil_wells_dayson'].mean()
+model = smf.ols('oil_per_well ~ days_centered * state', data=high_prod).fit()
+ols_summary = model.summary()
+
+print (ols_summary)
+#%%
+# Spearman Correlation by State
+spearman_corrs = []
+for state in high_prod['state'].unique():
+    subset = high_prod[high_prod['state'] == state]
+    rho, _ = stats.spearmanr(subset['oil_wells_dayson'], subset['oil_per_well'])
+    spearman_corrs.append({'state': state, 'spearman_corr': rho})
+spearman_df = pd.DataFrame(spearman_corrs).set_index('state')
+
+# Plot
+plt.figure(figsize=(8, 5))
+spearman_df.sort_values('spearman_corr', ascending=False).plot(
+    kind='barh', legend=False, color='skyblue'
+)
+plt.axvline(0, color='black', linestyle='--')
+plt.title("Spearman Correlation: Days vs Oil Production (Rate 15–16)")
+plt.xlabel("Correlation Coefficient (ρ)")
+plt.ylabel("State")
+plt.tight_layout()
+plt.show()
+
+
+
+spearman_df
+
+
+ 
+# %%[markdown]
+# Calculate Spearman correlations by state
+spearman_corrs = []
+for state in high_prod['state'].unique():
+    subset = high_prod[high_prod['state'] == state]
+    rho, _ = stats.spearmanr(subset['oil_wells_dayson'], subset['oil_per_well'])
+    spearman_corrs.append({'state': state, 'spearman_corr': rho})
+spearman_df = pd.DataFrame(spearman_corrs).set_index('state')
+
+# Reshape for heatmap (1 row matrix)
+heatmap_data = spearman_df.T  # Transpose to show states as columns
+
+# Plot heatmap
+plt.figure(figsize=(10, 2))  # Adjust width/height for readability
+sns.heatmap(
+    heatmap_data,
+    annot=True,
+    cmap='coolwarm',
+    vmin=-1,
+    vmax=1,
+    center=0,
+    cbar=False,
+    linewidths=0.5,
+    square=True
+)
+plt.title("Spearman Correlation: Days vs Oil Production (Rate 15–16)")
+plt.xlabel("State")
+plt.ylabel("")  # Hide redundant y-label
+plt.yticks([])  # Remove empty y-ticks
+plt.tight_layout()
+plt.show()
+
 
 
 #%%

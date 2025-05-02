@@ -52,6 +52,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import statsmodels.formula.api as smf
 
+
 #%%
 # Load and prepare data
 df = pd.read_csv('all-years-states.csv')

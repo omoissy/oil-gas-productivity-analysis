@@ -618,7 +618,7 @@ print(f"R2 Score: {r2:.3f}")
 residuals = y_test - y_pred
 plt.scatter(y_pred, residuals, alpha=0.3)
 plt.axhline(0, color='red')
-plt.xlabel("Predicted Production")
+plt.xlabel("Predicted Oil Production")
 plt.ylabel("Residuals")
 
 #%%
@@ -674,6 +674,47 @@ preds = gas_pipe.predict(X_test)
 print("\nTask 2 - NAgas Production Prediction:")
 print(f"R2 Score: {r2_score(y_test, preds):.3f}")
 print(f"MAE: {mean_absolute_error(np.expm1(y_test), np.expm1(preds)):,.0f} MCF")
+
+
+# %%[markdown]
+# Reduce Overfitting
+# Log transformation of target variable
+y_train_log = np.log1p(y_train)
+model.fit(X_train, y_train_log)  
+
+y_pred_log = model.predict(X_test)
+y_pred = np.expm1(y_pred_log)  
+
+print(f"Manual R2: {r2_score(y_test, y_pred):.3f}")
+
+
+# %%[markdown]
+# Reduce Overfitting
+# Capping Extreme Outliers
+
+upper_cap = y_train.quantile(0.99)
+y_train_capped = np.log1p(y_train.clip(upper=upper_cap))
+
+model.fit(X_train, y_train_capped)
+
+y_pred_log = model.predict(X_test)
+
+y_pred = np.expm1(y_pred_log)  
+
+r2 = r2_score(y_test, y_pred)
+print(f"R2 Score: {r2:.3f}")
+
+
+# %%[markdown]
+# Reduce Overfitting
+# Plot Residuals
+
+residuals = y_test - y_pred
+plt.scatter(y_pred, residuals, alpha=0.3)
+plt.axhline(0, color='red')
+plt.xlabel("Predicted Gas Production")
+plt.ylabel("Residuals")
+
 
 
 #%%
